@@ -1,6 +1,7 @@
-import express, { Application } from "express";
+import express, { Application, NextFunction, Request, Response } from "express";
 import dotenv from "dotenv";
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcrypt";
 
 dotenv.config();
 const app: Application = express();
@@ -15,6 +16,61 @@ app.listen(PORT, () => {
 });
 
 // Routes
+// membuat endpoint baru untuk register
+app.use("/register", async (req, res) => {
+  const { name, email, address, password } = req.body;
+  const hasedPassword = await bcrypt.hash(password, 10);
+  const result = await prisma.user.create({
+    data: {
+      name,
+      email,
+      address,
+      password: hasedPassword,
+    },
+  });
+  res.json({
+    data: result,
+    message: "success register",
+  });
+});
+
+// membuat logic login menggunakan password yang sudah di hash
+app.use("/login", async (req, res) => {
+  const { email, password } = req.body;
+  const user = await prisma.user.findUnique({
+    where: {
+      email: email,
+    },
+  });
+  if (!user) {
+    res.status(404).json({
+      message: "user not found",
+    });
+  }
+  if (!user?.password) {
+    res.status(404).json({
+      message: "password not set",
+    });
+  }
+  if (user && typeof user.password === "string") {
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (isPasswordValid) {
+      res.status(200).json({
+        data: {
+          id: user?.id,
+          name: user?.name,
+          email: user?.email,
+          address: user?.address,
+        },
+      });
+    } else {
+      res.status(404).json({
+        message: "password not valid",
+      });
+    }
+  }
+});
+
 // get a list of users
 app.get("/users", async (req, res) => {
   const result = await prisma.user.findMany({
